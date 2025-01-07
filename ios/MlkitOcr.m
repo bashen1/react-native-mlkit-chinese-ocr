@@ -3,6 +3,8 @@
 #import <React/RCTBridge.h>
 #import <React/RCTLog.h>
 
+#import <Photos/Photos.h>
+
 #import <CoreGraphics/CoreGraphics.h>
 #import <GoogleMLKit/MLKit.h>
 
@@ -74,54 +76,129 @@ NSMutableArray* prepareOutput(MLKText *result) {
 }
 
 
+- (void)handleRecognizer:(UIImage *)image imagePath:(NSString *)imagePath resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject {
+    if (!image) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            RCTLog(@"No image found %@", imagePath);
+            reject(@"no_image", @"No image path provided", nil);
+        });
+        return;
+    }
+    
+    MLKChineseTextRecognizerOptions *chineseOptions = [[MLKChineseTextRecognizerOptions alloc] init];
+    MLKTextRecognizer *textRecognizer = [MLKTextRecognizer textRecognizerWithOptions:chineseOptions];
+        
+    MLKVisionImage *handler = [[MLKVisionImage alloc] initWithImage:image];
+
+    [textRecognizer processImage:handler
+                      completion:^(MLKText *_Nullable result, NSError *_Nullable error) {
+        @try {
+            if (error != nil || result == nil) {
+                NSString *errorString = error ? error.localizedDescription : detectionNoResultsMessage;
+                @throw [NSException exceptionWithName:@"failure"
+                                               reason:errorString
+                                             userInfo:nil];
+                return;
+            }
+
+            NSMutableArray *output = prepareOutput(result);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                               resolve(output);
+                           });
+        } @catch (NSException *e) {
+            NSString *errorString = e ? e.reason : detectionNoResultsMessage;
+            NSDictionary *pData = @{
+                    @"error": [NSMutableString stringWithFormat:@"On-Device text detection failed with error: %@", errorString],
+            };
+            dispatch_async(dispatch_get_main_queue(), ^{
+                               resolve(pData);
+                           });
+        }
+    }];
+}
+        
+- (void)handlePHAssets:(NSString *)imagePath resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject {
+    [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus status) {
+        if (status == PHAuthorizationStatusAuthorized) {
+            NSString *localIdentifier = [imagePath substringFromIndex:5];
+            PHFetchResult<PHAsset *> *fetchResult = [PHAsset fetchAssetsWithLocalIdentifiers:@[localIdentifier]
+                                                                                     options:nil];
+            if (fetchResult.count == 0) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                                   RCTLog(@"No image found %@", imagePath);
+                                   reject(@"no_image", @"No image path provided", nil);
+                               });
+                return;
+            }
+
+            PHAsset *asset = fetchResult.firstObject;
+
+            if (asset) {
+                PHImageManager *imageManager = [PHImageManager defaultManager];
+                PHImageRequestOptions *options = [[PHImageRequestOptions alloc] init];
+                options.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
+                options.resizeMode = PHImageRequestOptionsResizeModeExact;
+
+                [imageManager requestImageForAsset:asset
+                                        targetSize:PHImageManagerMaximumSize
+                                       contentMode:PHImageContentModeDefault
+                                           options:options
+                                     resultHandler:^(UIImage *_Nullable result, NSDictionary *_Nullable info) {
+                    if (result) {
+                        [self handleRecognizer:result
+                                     imagePath:imagePath
+                                      resolver:resolve
+                                      rejecter:reject];
+                    } else {
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                                           RCTLog(@"No image found %@", imagePath);
+                                           reject(@"no_image", @"No image path provided", nil);
+                                       });
+                        return;
+                    }
+                }];
+            } else {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                                   RCTLog(@"No image found %@", imagePath);
+                                   reject(@"no_image", @"No image path provided", nil);
+                               });
+                return;
+            }
+        } else {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                               RCTLog(@"No Photo Library Permissions%@", imagePath);
+                               reject(@"no_permissions", @"No photo library permissions", nil);
+                           });
+            return;
+        }
+    }];
+}
+
 RCT_REMAP_METHOD(detectFromUri, detectFromUri:(NSString *)imagePath resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
     if (!imagePath) {
         RCTLog(@"No image uri provided");
         reject(@"wrong_arguments", @"No image uri provided", nil);
         return;
     }
-    
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        NSData *imageData = [NSData dataWithContentsOfURL:[NSURL URLWithString:imagePath]];
-        UIImage *image = [UIImage imageWithData:imageData];
-        
-        if (!image) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                RCTLog(@"No image found %@", imagePath);
-                reject(@"no_image", @"No image path provided", nil);
-            });
-            return;
-        }
-        
-        MLKTextRecognizer *textRecognizer = [MLKTextRecognizer textRecognizer];
-        MLKVisionImage *handler = [[MLKVisionImage alloc] initWithImage:image];
-        
-        [textRecognizer processImage:handler completion:^(MLKText  *_Nullable result, NSError *_Nullable error) {
-            @try {
-                if (error != nil || result == nil) {
-                    NSString *errorString = error ? error.localizedDescription : detectionNoResultsMessage;
-                    @throw [NSException exceptionWithName:@"failure" reason:errorString userInfo:nil];
-                    return;
-                }
-                NSMutableArray *output = prepareOutput(result);
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    resolve(output);
-                });
-            }
-            @catch (NSException *e) {
-                NSString *errorString = e ? e.reason : detectionNoResultsMessage;
-                NSDictionary *pData = @{
-                                        @"error": [NSMutableString stringWithFormat:@"On-Device text detection failed with error: %@", errorString],
-                                        };
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    resolve(pData);
-                });
-            }
             
-        }];
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        if ([imagePath hasPrefix:@"ph://"]) {
+            [self handlePHAssets:imagePath resolver:resolve rejecter:reject];
+        } else {
+            NSData *imageData = [NSData dataWithContentsOfURL:[NSURL URLWithString:imagePath]];
+            UIImage *image = [UIImage imageWithData:imageData];
         
-    });
+            if (!image) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    RCTLog(@"No image found %@", imagePath);
+                    reject(@"no_image", @"No image path provided", nil);
+                });
+                return;
+            }
     
+            [self handleRecognizer:image imagePath:imagePath resolver:resolve rejecter:reject];
+        }
+    });
 }
 
 RCT_REMAP_METHOD(detectFromFile, detectFromFile:(NSString *)imagePath resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
@@ -131,45 +208,23 @@ RCT_REMAP_METHOD(detectFromFile, detectFromFile:(NSString *)imagePath resolver:(
     }
     
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        NSData *imageData = [NSData dataWithContentsOfFile:imagePath];
-        UIImage *image = [UIImage imageWithData:imageData];
+        if ([imagePath hasPrefix:@"ph://"]) {
+            [self handlePHAssets:imagePath resolver:resolve rejecter:reject];
+        } else {
+            NSData *imageData = [NSData dataWithContentsOfFile:imagePath];
+            UIImage *image = [UIImage imageWithData:imageData];
         
-        if (!image) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                reject(@"no_image", @"No image path provided", nil);
-            });
-            return;
+            if (!image) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    RCTLog(@"No image found %@", imagePath);
+                    reject(@"no_image", @"No image path provided", nil);
+                });
+                return;
+            }
+            
+            [self handleRecognizer:image imagePath:imagePath resolver:resolve rejecter:reject];
         }
-        
-        MLKTextRecognizer *textRecognizer = [MLKTextRecognizer textRecognizer];
-        MLKVisionImage *handler = [[MLKVisionImage alloc] initWithImage:image];
-        
-        [textRecognizer processImage:handler completion:^(MLKText *_Nullable result, NSError *_Nullable error) {
-            @try {
-                if (error != nil || result == nil) {
-                    NSString *errorString = error ? error.localizedDescription : detectionNoResultsMessage;
-                    @throw [NSException exceptionWithName:@"failure" reason:errorString userInfo:nil];
-                    return;
-                }
-            
-                NSMutableArray *output = prepareOutput(result);
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    resolve(output);
-                });
-            }
-            @catch (NSException *e) {
-                NSString *errorString = e ? e.reason : detectionNoResultsMessage;
-                NSDictionary *pData = @{
-                                        @"error": [NSMutableString stringWithFormat:@"On-Device text detection failed with error: %@", errorString],
-                                        };
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    resolve(pData);
-                });
-            }
-            
-        }];
     });
-    
 }
 
 
