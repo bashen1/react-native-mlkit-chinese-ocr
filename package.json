@@ -1,0 +1,27 @@
+{
+  "name": "react-native-mlkit-chinese-ocr",
+  "version": "0.3.0",
+  "description": "Google on-device MLKit text recognition for React Native",
+  "main": "src/index",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "mlkit",
+    "ocr",
+    "chinese",
+    "text-recognition",
+    "react-native",
+    "ios",
+    "android"
+  ],
+  "author": "bashen1 <maochunjie@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/bashen1/react-native-mlkit-chinese-ocr/issues"
+  },
+  "homepage": "https://github.com/bashen1/react-native-mlkit-chinese-ocr#readme",
+  "peerDependencies": {
+    "react-native": ">=0.40"
+  }
+}
