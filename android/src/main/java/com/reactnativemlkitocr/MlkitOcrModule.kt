@@ -1,5 +1,6 @@
 package com.reactnativemlkitocr
 
+import android.graphics.BitmapFactory
 import android.graphics.Point
 import android.graphics.Rect
 import android.net.Uri
@@ -7,8 +8,10 @@ import com.facebook.react.bridge.*
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
+import java.io.ByteArrayOutputStream
 import java.lang.Exception
+import java.net.URL
 
 
 class MlkitOcrModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
@@ -29,8 +32,21 @@ class MlkitOcrModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
   private fun detectFromResource(path: String, promise: Promise) {
     val image: InputImage;
     try {
-      image = InputImage.fromFilePath(reactApplicationContext,  Uri.parse(path))
-      val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+      if (path.startsWith("https://") || path.startsWith("http://")) {
+        val url = URL(path)
+        val connection = url.openConnection()
+        connection.connect()
+        val inputStream = connection.getInputStream()
+        val byteArrayOutputStream = ByteArrayOutputStream()
+        inputStream.copyTo(byteArrayOutputStream)
+        inputStream.close()
+        val bitmap = BitmapFactory.decodeByteArray(byteArrayOutputStream.toByteArray(), 0, byteArrayOutputStream.size())
+        image = InputImage.fromBitmap(bitmap, 0)
+        inputStream.close()
+      } else {
+        image = InputImage.fromFilePath(reactApplicationContext,  Uri.parse(path))
+      }
+      val recognizer = TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
       recognizer.process(image).addOnSuccessListener { visionText ->
         promise.resolve(getDataAsArray(visionText))
       }.addOnFailureListener { e ->
