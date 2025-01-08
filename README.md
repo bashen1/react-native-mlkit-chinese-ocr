@@ -29,8 +29,14 @@ import MlkitOcr from 'react-native-mlkit-chinese-ocr';
 
 // ...
 
-const resultFromUri = await MlkitOcr.detectFromUri(uri);
-const resultFromFile = await MlkitOcr.detectFromFile(path);
+const resultFromUri = await MlkitOcr.detectFromUri({
+    uri: '',
+    quality: 1, // 0 - 1，可选
+});
+const resultFromFile = await MlkitOcr.detectFromFile({
+    uri: '',
+    quality: 1, // 0 - 1，可选
+});
 const res = await MlkitOcr.checkAuth(); // iOS Only
 const res = await MlkitOcr.requestAuth(); // iOS Only
 ```
