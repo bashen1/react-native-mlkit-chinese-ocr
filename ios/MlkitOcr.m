@@ -16,39 +16,41 @@ static NSString *const detectionNoResultsMessage = @"Something went wrong";
 
 
 
-NSMutableArray* getCornerPoints(NSArray *cornerPoints) {
+NSMutableArray * getCornerPoints(NSArray *cornerPoints) {
     NSMutableArray *result = [NSMutableArray array];
-    
+
     if (cornerPoints == nil) {
         return result;
     }
-    for (NSValue  *point in cornerPoints) {
+
+    for (NSValue *point in cornerPoints) {
         NSMutableDictionary *resultPoint = [NSMutableDictionary dictionary];
         [resultPoint setObject:[NSNumber numberWithFloat:point.CGPointValue.x] forKey:@"x"];
         [resultPoint setObject:[NSNumber numberWithFloat:point.CGPointValue.y] forKey:@"y"];
         [result addObject:resultPoint];
     }
+
     return result;
 }
 
-
-NSDictionary* getBounding(CGRect frame) {
+NSDictionary * getBounding(CGRect frame) {
     return @{
-       @"top": @(frame.origin.y),
-       @"left": @(frame.origin.x),
-       @"width": @(frame.size.width),
-       @"height": @(frame.size.height)
-   };
+        @"top": @(frame.origin.y),
+        @"left": @(frame.origin.x),
+        @"width": @(frame.size.width),
+        @"height": @(frame.size.height)
+    };
 }
 
-
-NSMutableArray* prepareOutput(MLKText *result) {
+NSMutableDictionary * prepareOutput(MLKText *result, UIImage *image) {
     NSMutableArray *output = [NSMutableArray array];
+
     for (MLKTextBlock *block in result.blocks) {
-        
         NSMutableArray *blockElements = [NSMutableArray array];
+
         for (MLKTextLine *line in block.lines) {
             NSMutableArray *lineElements = [NSMutableArray array];
+
             for (MLKTextElement *element in line.elements) {
                 NSMutableDictionary *e = [NSMutableDictionary dictionary];
                 e[@"text"] = element.text;
@@ -56,7 +58,7 @@ NSMutableArray* prepareOutput(MLKText *result) {
                 e[@"bounding"] = getBounding(element.frame);
                 [lineElements addObject:e];
             }
-            
+
             NSMutableDictionary *l = [NSMutableDictionary dictionary];
             l[@"text"] = line.text;
             l[@"cornerPoints"] = getCornerPoints(line.cornerPoints);
@@ -64,7 +66,7 @@ NSMutableArray* prepareOutput(MLKText *result) {
             l[@"bounding"] = getBounding(line.frame);
             [blockElements addObject:l];
         }
-        
+
         NSMutableDictionary *b = [NSMutableDictionary dictionary];
         b[@"text"] = block.text;
         b[@"cornerPoints"] = getCornerPoints(block.cornerPoints);
@@ -72,9 +74,23 @@ NSMutableArray* prepareOutput(MLKText *result) {
         b[@"lines"] = blockElements;
         [output addObject:b];
     }
-    return output;
-}
 
+    NSMutableDictionary *res = [NSMutableDictionary dictionary];
+    res[@"textRecognition"] = output;
+
+    NSString *base64Image = @"";
+
+    if (image) {
+        NSData *imageData = UIImagePNGRepresentation(image);
+
+        if (imageData) {
+            base64Image = [imageData base64EncodedStringWithOptions:0];
+        }
+    }
+
+    res[@"base64Image"] = base64Image;
+    return res;
+}
 
 - (void)handleRecognizer:(UIImage *)image imagePath:(NSString *)imagePath resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject {
     if (!image) {
@@ -84,10 +100,10 @@ NSMutableArray* prepareOutput(MLKText *result) {
         });
         return;
     }
-    
+
     MLKChineseTextRecognizerOptions *chineseOptions = [[MLKChineseTextRecognizerOptions alloc] init];
     MLKTextRecognizer *textRecognizer = [MLKTextRecognizer textRecognizerWithOptions:chineseOptions];
-        
+
     MLKVisionImage *handler = [[MLKVisionImage alloc] initWithImage:image];
 
     [textRecognizer processImage:handler
@@ -101,7 +117,7 @@ NSMutableArray* prepareOutput(MLKText *result) {
                 return;
             }
 
-            NSMutableArray *output = prepareOutput(result);
+            NSMutableDictionary *output = prepareOutput(result, image);
             dispatch_async(dispatch_get_main_queue(), ^{
                                resolve(output);
                            });
@@ -116,13 +132,14 @@ NSMutableArray* prepareOutput(MLKText *result) {
         }
     }];
 }
-        
+
 - (void)handlePHAssets:(NSString *)imagePath resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject {
     [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus status) {
         if (status == PHAuthorizationStatusAuthorized) {
             NSString *localIdentifier = [imagePath substringFromIndex:5];
             PHFetchResult<PHAsset *> *fetchResult = [PHAsset fetchAssetsWithLocalIdentifiers:@[localIdentifier]
                                                                                      options:nil];
+
             if (fetchResult.count == 0) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                                    RCTLog(@"No image found %@", imagePath);
@@ -180,14 +197,14 @@ RCT_REMAP_METHOD(detectFromUri, detectFromUri:(NSString *)imagePath resolver:(RC
         reject(@"wrong_arguments", @"No image uri provided", nil);
         return;
     }
-            
+
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         if ([imagePath hasPrefix:@"ph://"]) {
             [self handlePHAssets:imagePath resolver:resolve rejecter:reject];
         } else {
             NSData *imageData = [NSData dataWithContentsOfURL:[NSURL URLWithString:imagePath]];
             UIImage *image = [UIImage imageWithData:imageData];
-        
+
             if (!image) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     RCTLog(@"No image found %@", imagePath);
@@ -195,7 +212,7 @@ RCT_REMAP_METHOD(detectFromUri, detectFromUri:(NSString *)imagePath resolver:(RC
                 });
                 return;
             }
-    
+
             [self handleRecognizer:image imagePath:imagePath resolver:resolve rejecter:reject];
         }
     });
@@ -206,14 +223,14 @@ RCT_REMAP_METHOD(detectFromFile, detectFromFile:(NSString *)imagePath resolver:(
         reject(@"wrong_arguments", @"No image path provided", nil);
         return;
     }
-    
+
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         if ([imagePath hasPrefix:@"ph://"]) {
             [self handlePHAssets:imagePath resolver:resolve rejecter:reject];
         } else {
             NSData *imageData = [NSData dataWithContentsOfFile:imagePath];
             UIImage *image = [UIImage imageWithData:imageData];
-        
+
             if (!image) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     RCTLog(@"No image found %@", imagePath);
@@ -221,7 +238,7 @@ RCT_REMAP_METHOD(detectFromFile, detectFromFile:(NSString *)imagePath resolver:(
                 });
                 return;
             }
-            
+
             [self handleRecognizer:image imagePath:imagePath resolver:resolve rejecter:reject];
         }
     });
