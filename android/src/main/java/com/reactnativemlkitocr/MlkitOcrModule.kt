@@ -23,16 +23,18 @@ class MlkitOcrModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
-    fun detectFromUri(uri: String, promise: Promise) {
-        return this.detectFromResource(uri, promise);
+    fun detectFromUri(params: ReadableMap, promise: Promise) {
+        val uri: String = params.getString("uri").toString();
+        return this.detectFromResource(uri, params, promise);
     }
 
     @ReactMethod
-    fun detectFromFile(path: String, promise: Promise) {
-        return this.detectFromResource(path, promise);
+    fun detectFromFile(params: ReadableMap, promise: Promise) {
+        val path: String = params.getString("uri").toString();
+        return this.detectFromResource(path, params, promise);
     }
 
-    private fun detectFromResource(path: String, promise: Promise) {
+    private fun detectFromResource(path: String, params: ReadableMap, promise: Promise) {
         val image: InputImage;
         try {
             if (path.startsWith("https://") || path.startsWith("http://")) {
@@ -54,7 +56,7 @@ class MlkitOcrModule(reactContext: ReactApplicationContext) :
             val recognizer =
                 TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
             recognizer.process(image).addOnSuccessListener { visionText ->
-                promise.resolve(getDataAsArray(visionText, image))
+                promise.resolve(getDataAsArray(visionText, image, params))
             }.addOnFailureListener { e ->
                 promise.reject(e);
                 e.printStackTrace();
@@ -98,7 +100,11 @@ class MlkitOcrModule(reactContext: ReactApplicationContext) :
     }
 
 
-    private fun getDataAsArray(visionText: Text, image: InputImage): WritableMap? {
+    private fun getDataAsArray(
+        visionText: Text,
+        image: InputImage,
+        params: ReadableMap
+    ): WritableMap? {
         val data: WritableArray = Arguments.createArray()
 
         for (block in visionText.textBlocks) {
@@ -136,12 +142,19 @@ class MlkitOcrModule(reactContext: ReactApplicationContext) :
 
         val res: WritableMap = Arguments.createMap()
         res.putArray("textRecognition", data)
-        res.putString("base64Image", image.toBase64())
-
+        var base64Image = "";
+        if (params.hasKey("quality")) {
+            val quality = params.getDouble("quality") * 100
+            base64Image = image.toBase64(quality.toInt()).toString()
+        } else {
+            base64Image = image.toBase64(100).toString()
+        }
+        res.putString("base64Image", base64Image)
+        res.putInt("imageSize", base64Image.length.toLong().toInt())
         return res
     }
 
-    private fun InputImage.toBase64(): String? {
+    private fun InputImage.toBase64(quality: Int = 100): String? {
         // 尝试从 InputImage 获取 Bitmap
         val bitmap = when (this) {
             is InputImage -> this.bitmapInternal
@@ -150,9 +163,12 @@ class MlkitOcrModule(reactContext: ReactApplicationContext) :
 
         // 将 Bitmap 转换为字节数组
         val byteArrayOutputStream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream)
+        if (quality == 100) {
+            bitmap.compress(Bitmap.CompressFormat.PNG, quality, byteArrayOutputStream)
+        } else {
+            bitmap.compress(Bitmap.CompressFormat.JPEG, quality, byteArrayOutputStream)
+        }
         val imageBytes: ByteArray = byteArrayOutputStream.toByteArray()
-
         // 对字节数组进行 Base64 编码
         return Base64.encodeToString(imageBytes, Base64.DEFAULT)
     }
