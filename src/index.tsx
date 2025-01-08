@@ -1,4 +1,7 @@
-import { NativeModules } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
+
+const isIOS = Platform.OS === 'ios';
+const isAndroid = Platform.OS === 'android';
 
 // https://developers.google.com/ml-kit/reference/android
 
@@ -58,9 +61,17 @@ export type MKLBlock = {
 
 export type MlkitOcrResult = MKLBlock[];
 
+type MlkitOcrAuthResult = {
+  auth: boolean;
+  code: number;
+  message: string;
+};
+
 type MlkitOcrModule = {
   detectFromUri(uri: string): Promise<MlkitOcrResult>;
   detectFromFile(path: string): Promise<MlkitOcrResult>;
+  checkAuth({}): Promise<MlkitOcrAuthResult>;
+  requestAuth({}): Promise<MlkitOcrAuthResult>;
 };
 
 const MlkitOcr: MlkitOcrModule = NativeModules.MlkitOcr;
@@ -80,6 +91,28 @@ const MLKit: MlkitOcrModule = {
     }
     return result;
   },
+  checkAuth: async () => {
+    const result = await MlkitOcr.checkAuth({});
+    if (isAndroid) {
+      return {
+        auth: false,
+        code: -1,
+        message: 'Denied',
+      };
+    }
+    return result;
+  },
+  requestAuth: async () => {
+    const result = await MlkitOcr.requestAuth({});
+    if (isAndroid) {
+      return {
+        auth: false,
+        code: -1,
+        message: 'Denied',
+      };
+    }
+    return result;
+  }
 };
 
 export default MLKit;

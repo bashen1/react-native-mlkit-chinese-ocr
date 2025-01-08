@@ -191,6 +191,57 @@ NSMutableDictionary * prepareOutput(MLKText *result, UIImage *image) {
     }];
 }
 
+- (void)handleAuthStatus:(PHAuthorizationStatus)status resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject {
+    switch (status) {
+        case PHAuthorizationStatusAuthorized: {
+            // 已授权，可以访问相册
+            NSDictionary *ret = @{
+                    @"auth": @(YES),
+                    @"code": @(1),
+                    @"message": @"Authorized"
+            };
+            resolve(ret);
+            break;
+        }
+
+        case PHAuthorizationStatusDenied: {
+            // 拒绝
+            NSDictionary *ret = @{
+                    @"auth": @(NO),
+                    @"code": @(-1),
+                    @"message": @"Denied"
+            };
+            resolve(ret);
+            break;
+        }
+
+        case PHAuthorizationStatusRestricted: {
+            // 被拒绝或受限，不能访问相册
+            NSDictionary *ret = @{
+                    @"auth": @(NO),
+                    @"code": @(-2),
+                    @"message": @"Restricted"
+            };
+            resolve(ret);
+            break;
+        }
+
+        case PHAuthorizationStatusNotDetermined: {
+            // 尚未确定，请求访问相册权限
+            NSDictionary *ret = @{
+                    @"auth": @(NO),
+                    @"code": @(-3),
+                    @"message": @"NotDetermined"
+            };
+            resolve(ret);
+            break;
+        }
+
+        default:
+            break;
+    }
+}
+
 RCT_REMAP_METHOD(detectFromUri, detectFromUri:(NSString *)imagePath resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
     if (!imagePath) {
         RCTLog(@"No image uri provided");
@@ -244,5 +295,20 @@ RCT_REMAP_METHOD(detectFromFile, detectFromFile:(NSString *)imagePath resolver:(
     });
 }
 
+RCT_REMAP_METHOD(checkAuth, checkAuth:(NSDictionary *)param resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+    // 检查相册权限状态
+    PHAuthorizationStatus status = [PHPhotoLibrary authorizationStatus];
+
+    [self handleAuthStatus:status resolver:resolve rejecter:reject];
+}
+
+
+RCT_REMAP_METHOD(requestAuth, requestAuth:(NSDictionary *)param resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+    [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus status) {
+        [self handleAuthStatus:status
+                      resolver:resolve
+                      rejecter:reject];
+    }];
+}
 
 @end
