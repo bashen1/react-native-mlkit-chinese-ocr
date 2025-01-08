@@ -42,7 +42,7 @@ NSDictionary * getBounding(CGRect frame) {
     };
 }
 
-NSMutableDictionary * prepareOutput(MLKText *result, UIImage *image) {
+NSMutableDictionary * prepareOutput(MLKText *result, UIImage *image, NSDictionary *param) {
     NSMutableArray *output = [NSMutableArray array];
 
     for (MLKTextBlock *block in result.blocks) {
@@ -79,20 +79,30 @@ NSMutableDictionary * prepareOutput(MLKText *result, UIImage *image) {
     res[@"textRecognition"] = output;
 
     NSString *base64Image = @"";
+    NSUInteger imageSizeInBytes = 0;
 
     if (image) {
-        NSData *imageData = UIImagePNGRepresentation(image);
+        NSData *imageData;
+        NSNumber *compressionQuality = param[@"quality"];
+
+        if (compressionQuality) {
+            imageData = UIImageJPEGRepresentation(image, [compressionQuality doubleValue]);
+        } else {
+            imageData = UIImagePNGRepresentation(image);
+        }
 
         if (imageData) {
             base64Image = [imageData base64EncodedStringWithOptions:0];
+            imageSizeInBytes = [imageData length];
         }
     }
 
     res[@"base64Image"] = base64Image;
+    res[@"imageSize"] = @(imageSizeInBytes);
     return res;
 }
 
-- (void)handleRecognizer:(UIImage *)image imagePath:(NSString *)imagePath resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject {
+- (void)handleRecognizer:(UIImage *)image imagePath:(NSString *)imagePath funParam:(NSDictionary *)param resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject {
     if (!image) {
         dispatch_async(dispatch_get_main_queue(), ^{
             RCTLog(@"No image found %@", imagePath);
@@ -117,7 +127,7 @@ NSMutableDictionary * prepareOutput(MLKText *result, UIImage *image) {
                 return;
             }
 
-            NSMutableDictionary *output = prepareOutput(result, image);
+            NSMutableDictionary *output = prepareOutput(result, image, param);
             dispatch_async(dispatch_get_main_queue(), ^{
                                resolve(output);
                            });
@@ -133,7 +143,7 @@ NSMutableDictionary * prepareOutput(MLKText *result, UIImage *image) {
     }];
 }
 
-- (void)handlePHAssets:(NSString *)imagePath resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject {
+- (void)handlePHAssets:(NSString *)imagePath funParam:(NSDictionary *)param resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject {
     [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus status) {
         if (status == PHAuthorizationStatusAuthorized) {
             NSString *localIdentifier = [imagePath substringFromIndex:5];
@@ -164,6 +174,7 @@ NSMutableDictionary * prepareOutput(MLKText *result, UIImage *image) {
                     if (result) {
                         [self handleRecognizer:result
                                      imagePath:imagePath
+                                      funParam:param
                                       resolver:resolve
                                       rejecter:reject];
                     } else {
@@ -242,7 +253,9 @@ NSMutableDictionary * prepareOutput(MLKText *result, UIImage *image) {
     }
 }
 
-RCT_REMAP_METHOD(detectFromUri, detectFromUri:(NSString *)imagePath resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+RCT_REMAP_METHOD(detectFromUri, detectFromUri:(NSDictionary *)param resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+    NSString *imagePath = param[@"uri"];
+
     if (!imagePath) {
         RCTLog(@"No image uri provided");
         reject(@"wrong_arguments", @"No image uri provided", nil);
@@ -251,7 +264,7 @@ RCT_REMAP_METHOD(detectFromUri, detectFromUri:(NSString *)imagePath resolver:(RC
 
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         if ([imagePath hasPrefix:@"ph://"]) {
-            [self handlePHAssets:imagePath resolver:resolve rejecter:reject];
+            [self handlePHAssets:imagePath funParam:param resolver:resolve rejecter:reject];
         } else {
             NSData *imageData = [NSData dataWithContentsOfURL:[NSURL URLWithString:imagePath]];
             UIImage *image = [UIImage imageWithData:imageData];
@@ -264,12 +277,14 @@ RCT_REMAP_METHOD(detectFromUri, detectFromUri:(NSString *)imagePath resolver:(RC
                 return;
             }
 
-            [self handleRecognizer:image imagePath:imagePath resolver:resolve rejecter:reject];
+            [self handleRecognizer:image imagePath:imagePath funParam:param resolver:resolve rejecter:reject];
         }
     });
 }
 
-RCT_REMAP_METHOD(detectFromFile, detectFromFile:(NSString *)imagePath resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+RCT_REMAP_METHOD(detectFromFile, detectFromFile:(NSDictionary *)param resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+    NSString *imagePath = param[@"uri"];
+
     if (!imagePath) {
         reject(@"wrong_arguments", @"No image path provided", nil);
         return;
@@ -277,7 +292,7 @@ RCT_REMAP_METHOD(detectFromFile, detectFromFile:(NSString *)imagePath resolver:(
 
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         if ([imagePath hasPrefix:@"ph://"]) {
-            [self handlePHAssets:imagePath resolver:resolve rejecter:reject];
+            [self handlePHAssets:imagePath funParam:param resolver:resolve rejecter:reject];
         } else {
             NSData *imageData = [NSData dataWithContentsOfFile:imagePath];
             UIImage *image = [UIImage imageWithData:imageData];
@@ -290,7 +305,7 @@ RCT_REMAP_METHOD(detectFromFile, detectFromFile:(NSString *)imagePath resolver:(
                 return;
             }
 
-            [self handleRecognizer:image imagePath:imagePath resolver:resolve rejecter:reject];
+            [self handleRecognizer:image imagePath:imagePath funParam:param resolver:resolve rejecter:reject];
         }
     });
 }

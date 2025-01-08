@@ -67,9 +67,14 @@ type MlkitOcrAuthResult = {
   message: string;
 };
 
+type DetectFromParam = {
+  uri: string;
+  quality: number;
+};
+
 type MlkitOcrModule = {
-  detectFromUri(uri: string): Promise<MlkitOcrResult>;
-  detectFromFile(path: string): Promise<MlkitOcrResult>;
+  detectFromUri(params: DetectFromParam): Promise<MlkitOcrResult>;
+  detectFromFile(params: DetectFromParam): Promise<MlkitOcrResult>;
   checkAuth({}): Promise<MlkitOcrAuthResult>;
   requestAuth({}): Promise<MlkitOcrAuthResult>;
 };
@@ -77,15 +82,15 @@ type MlkitOcrModule = {
 const MlkitOcr: MlkitOcrModule = NativeModules.MlkitOcr;
 
 const MLKit: MlkitOcrModule = {
-  detectFromUri: async (uri: string) => {
-    const result = await MlkitOcr.detectFromUri(uri);
+  detectFromUri: async (params: DetectFromParam) => {
+    const result = await MlkitOcr.detectFromUri(params ?? {});
     if (!result) {
       return [];
     }
     return result;
   },
-  detectFromFile: async (path: string) => {
-    const result = await MlkitOcr.detectFromFile(path);
+  detectFromFile: async (params: DetectFromParam) => {
+    const result = await MlkitOcr.detectFromFile(params ?? {});
     if (!result) {
       return [];
     }
