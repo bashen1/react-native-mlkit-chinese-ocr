@@ -59,7 +59,11 @@ export type MKLBlock = {
   bounding: Bounding;
 };
 
-export type MlkitOcrResult = MKLBlock[];
+export type MlkitOcrResult = {
+  textRecognition: MKLBlock[],
+  base64Image: string;
+  imageSize: number;
+};
 
 type MlkitOcrAuthResult = {
   auth: boolean;
@@ -69,7 +73,7 @@ type MlkitOcrAuthResult = {
 
 type DetectFromParam = {
   uri: string;
-  quality: number;
+  quality?: number;
 };
 
 type MlkitOcrModule = {
@@ -84,17 +88,11 @@ const MlkitOcr: MlkitOcrModule = NativeModules.MlkitOcr;
 const MLKit: MlkitOcrModule = {
   detectFromUri: async (params: DetectFromParam) => {
     const result = await MlkitOcr.detectFromUri(params ?? {});
-    if (!result) {
-      return [];
-    }
-    return result;
+    return result ?? {};
   },
   detectFromFile: async (params: DetectFromParam) => {
     const result = await MlkitOcr.detectFromFile(params ?? {});
-    if (!result) {
-      return [];
-    }
-    return result;
+    return result ?? {};
   },
   checkAuth: async () => {
     const result = await MlkitOcr.checkAuth({});
