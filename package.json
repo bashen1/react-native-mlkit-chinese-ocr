@@ -1,6 +1,6 @@
 {
   "name": "react-native-mlkit-chinese-ocr",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Google on-device MLKit text recognition for React Native",
   "main": "src/index",
   "scripts": {
